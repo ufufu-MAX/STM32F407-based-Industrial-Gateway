@@ -27,6 +27,73 @@ Bootloader/                  Bootloader 工程
 - **ESP8266 桥接**：ESP-01S 在局域网中转发 TCP 和 UART 数据，接线及测试方法见 [ESP8266Bridge README](App/ESP8266Bridge/README.md)。
 - **网页端**：`App/WebOTA/` 提供 OTA 页面和 API 约定，具体依赖见 [WebOTA README](App/WebOTA/README.md)。网页和桥接程序的协议与部署方式需要分别核对，不能直接假定两者可以配合使用。
 
+## 开发环境
+
+以下版本来自仓库中的 `.uvprojx` 和 `.ioc` 工程配置：
+
+| 项目 | 配置 |
+| --- | --- |
+| 主控 | STM32F407ZGTx，Cortex-M4，LQFP144 |
+| 开发工具 | Keil MDK-ARM（工程格式为 `.uvprojx`） |
+| C 编译器 | ARM Compiler 5.06 Update 5，build 528（ARMCC 5，两个工程均选用此版本） |
+| Keil 设备支持包 | `Keil.STM32F4xx_DFP` 3.1.1 |
+| 配置工具 | STM32CubeMX 6.15.0 |
+| STM32 固件包 | STM32Cube FW_F4 V1.28.3 |
+| 操作系统组件 | FreeRTOS，源码位于 `App/Middlewares/` |
+| ESP-01S 开发 | Arduino IDE 及 ESP8266 Arduino core，板型选择 `Generic ESP8266 Module` |
+
+Keil 工程中记录的版本用于还原工程配置，并不代表其他版本已验证兼容。
+
+## 硬件接线
+
+下表依据应用程序的 GPIO、SPI、CAN 和 UART 初始化代码整理；请结合实际开发板原理图检查供电与引脚，所有模块需要共地。
+
+### W25Q64 与 STM32
+
+| W25Q64 信号 | STM32 引脚 | 说明 |
+| --- | --- | --- |
+| CS / NSS | PA4 | 软件控制片选 |
+| CLK | PA5 | SPI1_SCK |
+| DO / MISO | PA6 | SPI1_MISO |
+| DI / MOSI | PA7 | SPI1_MOSI |
+| VCC | 3.3 V | 按模块规格供电 |
+| GND | GND | 共地 |
+
+Bootloader 和应用程序均使用上述 SPI1 引脚；模块的 WP、HOLD 等引脚应按实际器件和模块原理图处理。
+
+### CAN 总线
+
+| STM32 引脚 | CAN 收发器端 | 说明 |
+| --- | --- | --- |
+| PA12 | TXD | CAN1_TX |
+| PA11 | RXD | CAN1_RX |
+| GND | GND | 共地 |
+
+CAN 控制器需要通过合适的 CAN 收发器连接总线：收发器的 CANH、CANL 对应连接总线 CANH、CANL，供电及使能脚按模块规格接线。总线两端各接 120 Ω 终端电阻；不要将 STM32 的 PA11/PA12 直接接到 CANH/CANL。
+
+### ESP-01S OTA 桥接
+
+| ESP-01S | STM32 引脚 | 说明 |
+| --- | --- | --- |
+| TX / GPIO1 | PA10 | USART1_RX |
+| RX / GPIO3 | PA9 | USART1_TX |
+| GND | GND | 共地 |
+| VCC | 3.3 V | 稳定供电，建议具备至少 500 mA 峰值能力 |
+
+USART1 配置为 115200、8N1。ESP-01S 的 EN/CH_PD 保持高电平；GPIO0 在烧录时拉低、正常启动时保持高电平。详细测试和启动顺序见 [桥接说明](App/ESP8266Bridge/README.md)。
+
+### OneNet 串口及其他接口
+
+| STM32 引脚 | 用途 |
+| --- | --- |
+| PA2 / USART2_TX | 接支持相应 AT 指令的通信模块 RX |
+| PA3 / USART2_RX | 接通信模块 TX |
+| PB6 / I2C1_SCL | I²C 时钟 |
+| PB7 / I2C1_SDA | I²C 数据 |
+| PC13 | GPIO 输出，实际连接设备以开发板原理图为准 |
+
+OneNet 代码通过 USART2 发送 AT 指令，串口配置为 115200、8N1。模块型号和供电接法应以实际使用的硬件为准；I²C 上拉电阻也需根据实际电路配置。
+
 ## 编译与烧录
 
 1. 安装 Keil MDK、适用于 STM32F407 的设备支持包和工程所需的 ARM 编译器。
