@@ -1,6 +1,12 @@
 # Prerequisites
 *.d
 
+# Local Keil build outputs
+App/MDK-ARM/APP_TWO/
+Bootloader/MDK-ARM/BOOTLOADER-TWO/
+*.uvguix.*
+*.log
+
 # Object files
 *.o
 *.ko

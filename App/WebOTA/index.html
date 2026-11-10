@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>STM32 远程 OTA</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">OTA</span>
+      <div>
+        <strong>STM32 设备升级中心</strong>
+        <span>ESP-01S Remote Updater</span>
+      </div>
+    </div>
+    <div class="connection-badge" id="connectionBadge">
+      <span class="status-dot" id="connectionDot"></span>
+      <span id="connectionText">尚未连接</span>
+    </div>
+  </header>
+
+  <main class="page-shell">
+    <section class="page-heading">
+      <div>
+        <p class="eyebrow">固件发布</p>
+        <h1>远程升级 STM32F407</h1>
+        <p>上传固件后，由 HTTPS 服务将升级任务交给 ESP-01S，ESP 再沿用现有 UART OTA 协议发送到 STM32。</p>
+      </div>
+      <button class="button secondary" id="connectButton" type="button">测试设备连接</button>
+    </section>
+
+    <section class="panel connection-panel" aria-labelledby="connectionTitle">
+      <div class="panel-title-row">
+        <div>
+          <p class="section-kicker">连接</p>
+          <h2 id="connectionTitle">升级目标</h2>
+        </div>
+        <div class="mode-switch" role="radiogroup" aria-label="连接方式">
+          <button class="mode-option active" data-mode="remote" role="radio" aria-checked="true" type="button">远程服务器</button>
+          <button class="mode-option" data-mode="local" role="radio" aria-checked="false" type="button">局域网直连</button>
+        </div>
+      </div>
+
+      <div class="connection-fields">
+        <label class="field field-wide">
+          <span id="apiLabel">HTTPS API 地址</span>
+          <input id="apiBase" type="url" value="https://ota.example.com" placeholder="https://ota.example.com" autocomplete="url">
+          <small id="apiHint">网页和 ESP-01S 都通过这个 HTTPS 服务交换升级任务。</small>
+        </label>
+        <label class="field" id="deviceIdField">
+          <span>设备 ID</span>
+          <input id="deviceId" type="text" value="stm32-f407-001" placeholder="stm32-f407-001" autocomplete="off">
+          <small>服务器中唯一标识这台设备。</small>
+        </label>
+      </div>
+
+      <dl class="device-strip">
+        <div><dt>设备状态</dt><dd id="deviceStatus">未知</dd></div>
+        <div><dt>当前版本</dt><dd id="currentVersion">—</dd></div>
+        <div><dt>ESP 信号</dt><dd id="wifiRssi">—</dd></div>
+        <div><dt>最后在线</dt><dd id="lastSeen">—</dd></div>
+      </dl>
+    </section>
+
+    <div class="content-grid">
+      <section class="panel upgrade-panel" aria-labelledby="firmwareTitle">
+        <div class="panel-title-row">
+          <div>
+            <p class="section-kicker">步骤 1</p>
+            <h2 id="firmwareTitle">选择 STM32 固件</h2>
+          </div>
+          <span class="protocol-tag">F407 / W25Q64</span>
+        </div>
+
+        <input id="fileInput" type="file" accept=".bin,application/octet-stream" hidden>
+        <button class="drop-zone" id="dropZone" type="button">
+          <span class="drop-title" id="dropTitle">选择或拖入 APP.bin</span>
+          <span class="drop-subtitle" id="dropSubtitle">固件上限 960 KiB；选择后在浏览器内计算 CRC32 与 SHA-256</span>
+        </button>
+
+        <div class="firmware-metrics" aria-live="polite">
+          <div><span>固件大小</span><strong id="firmwareSize">—</strong></div>
+          <div><span>CRC32</span><strong id="firmwareCrc">—</strong></div>
+          <div><span>总包数</span><strong id="totalPackets">—</strong></div>
+          <div><span>末包大小</span><strong id="lastPacketSize">—</strong></div>
+        </div>
+
+        <div class="hash-row">
+          <span>SHA-256</span>
+          <code id="firmwareSha">选择固件后计算</code>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="panel-title-row compact">
+          <div>
+            <p class="section-kicker">步骤 2</p>
+            <h2>传输参数</h2>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <label class="field">
+            <span>固件版本</span>
+            <input id="firmwareVersion" type="text" value="0x00000001" inputmode="text">
+          </label>
+          <label class="field">
+            <span>UART 波特率</span>
+            <select id="baudRate">
+              <option value="115200" selected>115200</option>
+              <option value="230400">230400</option>
+              <option value="460800">460800</option>
+              <option value="921600">921600</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>分包大小</span>
+            <select id="frameSize">
+              <option value="256">256 bytes</option>
+              <option value="512">512 bytes</option>
+              <option value="1024" selected>1024 bytes</option>
+              <option value="2048">2048 bytes</option>
+              <option value="4096">4096 bytes</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>ACK 超时</span>
+            <div class="input-suffix"><input id="ackTimeout" type="number" min="1" max="30" step="0.5" value="3"><span>秒</span></div>
+          </label>
+          <label class="field">
+            <span>最大重试</span>
+            <div class="input-suffix"><input id="maxRetries" type="number" min="0" max="20" step="1" value="5"><span>次</span></div>
+          </label>
+        </div>
+
+        <div class="protocol-preview">
+          <div>
+            <span>14 字节起始包</span>
+            <small>A5 A5 + 版本 + 大小 + 分包大小 + 5A 5A</small>
+          </div>
+          <code id="startPacket">A5 A5 01 00 00 00 00 00 00 00 00 04 5A 5A</code>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <div class="progress-header">
+          <div>
+            <p class="section-kicker">步骤 3</p>
+            <h2>执行升级</h2>
+          </div>
+          <strong id="progressPercent">0%</strong>
+        </div>
+
+        <div class="progress-track" aria-label="升级进度">
+          <div id="progressBar"></div>
+        </div>
+        <div class="progress-meta">
+          <span id="stageText">等待选择固件</span>
+          <span id="byteProgress">0 B / 0 B</span>
+        </div>
+
+        <ol class="stage-list" id="stageList">
+          <li data-stage="uploading"><span>1</span>上传服务器</li>
+          <li data-stage="downloading"><span>2</span>ESP下载</li>
+          <li data-stage="transferring"><span>3</span>串口写入</li>
+          <li data-stage="installing"><span>4</span>校验安装</li>
+        </ol>
+
+        <div class="action-row">
+          <button class="button primary" id="startButton" type="button" disabled>开始远程升级</button>
+          <button class="button danger" id="cancelButton" type="button" disabled>停止升级</button>
+        </div>
+      </section>
+
+      <aside class="panel log-panel" aria-labelledby="logTitle">
+        <div class="panel-title-row">
+          <div>
+            <p class="section-kicker">实时信息</p>
+            <h2 id="logTitle">升级日志</h2>
+          </div>
+          <button class="text-button" id="clearLogButton" type="button">清空</button>
+        </div>
+        <div class="log-console" id="logConsole" role="log" aria-live="polite"></div>
+        <div class="protocol-facts">
+          <h3>当前串口协议</h3>
+          <dl>
+            <div><dt>起始应答</dt><dd><code>0x79</code></dd></div>
+            <div><dt>数据应答</dt><dd><code>0x79</code></dd></div>
+            <div><dt>末包应答</dt><dd><code>0x7A</code></dd></div>
+            <div><dt>固件地址</dt><dd><code>W25Q 0x1000</code></dd></div>
+          </dl>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
